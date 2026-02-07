@@ -42,4 +42,8 @@ class Calendar extends Model
         return $this->hasMany(CustomEventField::class);
     }
 
+    public function accessKeys(){
+        return $this->hasMany(AccessKey::class);
+    }
+
 }

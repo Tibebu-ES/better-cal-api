@@ -22,4 +22,8 @@ class Event extends Model
     public function subCalendar(){
         return $this->belongsTo(SubCalendar::class);
     }
+
+    public function customEventFieldValues(){
+        return $this->hasMany(CustomEventFieldValue::class);
+    }
 }

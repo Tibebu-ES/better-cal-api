@@ -38,4 +38,8 @@ class Calendar extends Model
         return $this->hasManyThrough(Event::class, SubCalendar::class);
     }
 
+    public function customEventFields(){
+        return $this->hasMany(CustomEventField::class);
+    }
+
 }

@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\V1\CalendarController;
+use App\Http\Controllers\Api\V1\CustomEventFieldController;
 use App\Http\Controllers\Api\V1\EventController;
 use App\Http\Controllers\Api\V1\SubCalendarController;
 use Illuminate\Http\Request;
@@ -19,6 +20,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::apiResource('calendars', CalendarController::class);
         Route::apiResource('sub-calendars', SubCalendarController::class);
         Route::apiResource('events', EventController::class);
+        Route::apiResource('custom-event-fields', CustomEventFieldController::class);
     });
 
 });

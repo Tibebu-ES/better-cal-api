@@ -1,7 +1,9 @@
 <?php
 
-use App\Http\Controllers\Api\CalendarController;
 use Illuminate\Support\Facades\Route;
 
+Route::get('/', function () {
+    return ['Laravel' => app()->version()];
+});
 
 

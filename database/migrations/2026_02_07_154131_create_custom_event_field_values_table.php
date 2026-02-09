@@ -16,6 +16,7 @@ return new class extends Migration
             $table->foreignId('custom_event_field_id')->constrained()->cascadeOnDelete();
             $table->foreignId('event_id')->constrained()->cascadeOnDelete();
             $table->string('value')->nullable();
+            $table->foreignId('custom_event_field_option_id')->nullable()->constrained()->cascadeOnDelete();
             $table->timestamps();
         });
     }

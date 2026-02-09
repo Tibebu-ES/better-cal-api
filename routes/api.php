@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\V1\AccessKeyController;
 use App\Http\Controllers\Api\V1\CalendarController;
 use App\Http\Controllers\Api\V1\CustomEventFieldController;
 use App\Http\Controllers\Api\V1\EventController;
@@ -21,6 +22,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::apiResource('sub-calendars', SubCalendarController::class);
         Route::apiResource('events', EventController::class);
         Route::apiResource('custom-event-fields', CustomEventFieldController::class);
+        Route::apiResource('access-keys', AccessKeyController::class);
     });
 
 });

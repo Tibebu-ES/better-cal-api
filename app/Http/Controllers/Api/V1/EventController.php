@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\EventResource;
+use App\Models\Calendar;
 use App\Models\CustomEventField;
 use App\Models\CustomEventFieldOption;
 use App\Models\CustomEventFieldValue;
@@ -18,29 +19,27 @@ class EventController extends Controller
     /**
      * Display a listing of the resource.
      */
-    public function index(Request $request)
+    public function index(Request $request, Calendar $calendar)
     {
         $user = $request->user();
 
-        $query = Event::query()
-            ->whereHas('subCalendar.calendar', function ($q) use ($user) {
-                $q->where('user_id', $user->id);
-            })
+        if ((int) $calendar->user_id !== (int) $user->id) {
+            abort(404);
+        }
+
+        $query = $calendar->events()
             ->with([
                 'customEventFieldValues.customEventField',
-                'customEventFieldValues.customEventFieldOption'
+                'customEventFieldValues.customEventFieldOption',
             ])
             ->orderByDesc('id');
 
         if ($request->filled('sub_calendar_id')) {
-            $query->where('sub_calendar_id', (int) $request->input('sub_calendar_id'));
-        }
+            $subCalendarId = (int) $request->input('sub_calendar_id');
 
-        if ($request->filled('calendar_id')) {
-            $calendarId = (int) $request->input('calendar_id');
-
-            $query->whereHas('subCalendar', function ($q) use ($calendarId) {
-                $q->where('calendar_id', $calendarId);
+            $query->whereHas('subCalendar', function ($q) use ($subCalendarId, $calendar) {
+                $q->where('id', $subCalendarId)
+                    ->where('calendar_id', $calendar->id);
             });
         }
 
@@ -74,9 +73,13 @@ class EventController extends Controller
      * { "custom_event_field_id": 12, "custom_event_field_option_ids": [61, 62] }
      * ]
      */
-    public function store(Request $request)
+    public function store(Request $request, Calendar $calendar)
     {
         $user = $request->user();
+
+        if ((int) $calendar->user_id !== (int) $user->id) {
+            abort(404);
+        }
 
         $data = $request->validate([
             'sub_calendar_id' => ['required', 'integer'],
@@ -100,12 +103,10 @@ class EventController extends Controller
 
         $subCalendar = SubCalendar::query()
             ->where('id', $data['sub_calendar_id'])
-            ->whereHas('calendar', function ($q) use ($user) {
-                $q->where('user_id', $user->id);
-            })
+            ->where('calendar_id', $calendar->id)
             ->firstOrFail();
 
-        $event = DB::transaction(function () use ($data, $subCalendar, $request) {
+        $event = DB::transaction(function () use ($data, $subCalendar, $request, $calendar) {
             $event = Event::create([
                 'sub_calendar_id' => $subCalendar->id,
                 'title' => $data['title'],
@@ -123,7 +124,7 @@ class EventController extends Controller
                 ?? null;
 
             if (is_array($incomingValues)) {
-                $this->syncCustomEventFieldValues($event, (int) $subCalendar->calendar_id, $incomingValues);
+                $this->syncCustomEventFieldValues($event, (int) $calendar->id, $incomingValues);
             }
 
             return $event;
@@ -131,7 +132,7 @@ class EventController extends Controller
 
         $event->load([
             'customEventFieldValues.customEventField',
-            'customEventFieldValues.customEventFieldOption'
+            'customEventFieldValues.customEventFieldOption',
         ]);
 
         return new EventResource($event);
@@ -140,18 +141,18 @@ class EventController extends Controller
     /**
      * Display the specified resource.
      */
-    public function show(Request $request, string $id)
+    public function show(Request $request, Calendar $calendar, Event $event)
     {
-        $event = Event::query()
-            ->where('id', $id)
-            ->whereHas('subCalendar.calendar', function ($q) use ($request) {
-                $q->where('user_id', $request->user()->id);
-            })
-            ->with([
-                'customEventFieldValues.customEventField',
-                'customEventFieldValues.customEventFieldOption'
-            ])
-            ->firstOrFail();
+        $user = $request->user();
+
+        if ((int) $calendar->user_id !== (int) $user->id) {
+            abort(404);
+        }
+
+        $event->load([
+            'customEventFieldValues.customEventField',
+            'customEventFieldValues.customEventFieldOption',
+        ]);
 
         return new EventResource($event);
     }
@@ -159,14 +160,13 @@ class EventController extends Controller
     /**
      * Update the specified resource in storage.
      */
-    public function update(Request $request, string $id)
+    public function update(Request $request, Calendar $calendar, Event $event)
     {
-        $event = Event::query()
-            ->where('id', $id)
-            ->whereHas('subCalendar.calendar', function ($q) use ($request) {
-                $q->where('user_id', $request->user()->id);
-            })
-            ->firstOrFail();
+        $user = $request->user();
+
+        if ((int) $calendar->user_id !== (int) $user->id) {
+            abort(404);
+        }
 
         $data = $request->validate([
             'sub_calendar_id' => ['sometimes', 'integer'],
@@ -194,13 +194,11 @@ class EventController extends Controller
             ]);
         }
 
-        DB::transaction(function () use ($event, $data, $request) {
+        DB::transaction(function () use ($event, $data, $request, $calendar) {
             if (array_key_exists('sub_calendar_id', $data)) {
                 $subCalendar = SubCalendar::query()
                     ->where('id', $data['sub_calendar_id'])
-                    ->whereHas('calendar', function ($q) use ($request) {
-                        $q->where('user_id', $request->user()->id);
-                    })
+                    ->where('calendar_id', $calendar->id)
                     ->firstOrFail();
 
                 $data['sub_calendar_id'] = $subCalendar->id;
@@ -214,16 +212,14 @@ class EventController extends Controller
                 ?? null;
 
             if (is_array($incomingValues)) {
-                $calendarId = (int) $event->subCalendar()->value('calendar_id');
-                $this->syncCustomEventFieldValues($event, $calendarId, $incomingValues);
+                $this->syncCustomEventFieldValues($event, (int) $calendar->id, $incomingValues);
             }
         });
 
         $event->load([
             'customEventFieldValues.customEventField',
-            'customEventFieldValues.customEventFieldOption'
+            'customEventFieldValues.customEventFieldOption',
         ]);
-
 
         return new EventResource($event);
     }
@@ -231,14 +227,13 @@ class EventController extends Controller
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy(Request $request, string $id)
+    public function destroy(Request $request, Calendar $calendar, Event $event)
     {
-        $event = Event::query()
-            ->where('id', $id)
-            ->whereHas('subCalendar.calendar', function ($q) use ($request) {
-                $q->where('user_id', $request->user()->id);
-            })
-            ->firstOrFail();
+        $user = $request->user();
+
+        if ((int) $calendar->user_id !== (int) $user->id) {
+            abort(404);
+        }
 
         $event->delete();
 

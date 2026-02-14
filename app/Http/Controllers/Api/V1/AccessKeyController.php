@@ -17,20 +17,17 @@ class AccessKeyController extends Controller
     /**
      * Display a listing of the resource.
      */
-    public function index(Request $request)
+    public function index(Request $request, Calendar $calendar)
     {
         $user = $request->user();
 
-        $query = AccessKey::query()
-            ->with(['subCalendarPermissions'])
-            ->whereHas('calendar', function ($q) use ($user) {
-                $q->where('user_id', $user->id);
-            })
-            ->orderByDesc('id');
-
-        if ($request->filled('calendar_id')) {
-            $query->where('calendar_id', (int) $request->input('calendar_id'));
+        if ((int) $calendar->user_id !== (int) $user->id) {
+            abort(404);
         }
+
+        $query = $calendar->accessKeys()
+            ->with(['subCalendarPermissions'])
+            ->orderByDesc('id');
 
         $accessKeys = $query->paginate((int) $request->integer('per_page', 15));
 
@@ -51,12 +48,15 @@ class AccessKeyController extends Controller
      * ]
      * }
      */
-    public function store(Request $request)
+    public function store(Request $request, Calendar $calendar)
     {
         $user = $request->user();
 
+        if ((int) $calendar->user_id !== (int) $user->id) {
+            abort(404);
+        }
+
         $data = $request->validate([
-            'calendar_id' => ['required', 'integer'],
             'name' => ['required', 'string', 'max:255'],
             'active' => ['sometimes', 'boolean'],
 
@@ -67,11 +67,6 @@ class AccessKeyController extends Controller
             'sub_calendar_permissions.*.sub_calendar_id' => ['required', 'integer'],
             'sub_calendar_permissions.*.access_type' => ['required', Rule::in(['read_only', 'modify'])],
         ]);
-
-        $calendar = Calendar::query()
-            ->where('id', $data['calendar_id'])
-            ->where('user_id', $user->id)
-            ->firstOrFail();
 
         $hasPassword = (bool) ($data['has_password'] ?? false);
         $password = $data['password'] ?? null;
@@ -86,7 +81,7 @@ class AccessKeyController extends Controller
         }
 
         $incomingPerms = $data['sub_calendar_permissions'] ?? [];
-        $this->assertValidSubCalendarPermissions($calendar->id, $incomingPerms);
+        $this->assertValidSubCalendarPermissions((int) $calendar->id, $incomingPerms);
 
         $accessKey = DB::transaction(function () use ($calendar, $data, $hasPassword, $password, $incomingPerms) {
             $accessKey = AccessKey::create([
@@ -119,15 +114,15 @@ class AccessKeyController extends Controller
     /**
      * Display the specified resource.
      */
-    public function show(Request $request, string $id)
+    public function show(Request $request, Calendar $calendar, AccessKey $accessKey)
     {
-        $accessKey = AccessKey::query()
-            ->with(['subCalendarPermissions'])
-            ->where('id', $id)
-            ->whereHas('calendar', function ($q) use ($request) {
-                $q->where('user_id', $request->user()->id);
-            })
-            ->firstOrFail();
+        $user = $request->user();
+
+        if ((int) $calendar->user_id !== (int) $user->id) {
+            abort(404);
+        }
+
+        $accessKey->load(['subCalendarPermissions']);
 
         return response()->json($accessKey->makeHidden(['password']));
     }
@@ -135,17 +130,15 @@ class AccessKeyController extends Controller
     /**
      * Update the specified resource in storage.
      */
-    public function update(Request $request, string $id)
+    public function update(Request $request, Calendar $calendar, AccessKey $accessKey)
     {
-        $accessKey = AccessKey::query()
-            ->where('id', $id)
-            ->whereHas('calendar', function ($q) use ($request) {
-                $q->where('user_id', $request->user()->id);
-            })
-            ->firstOrFail();
+        $user = $request->user();
+
+        if ((int) $calendar->user_id !== (int) $user->id) {
+            abort(404);
+        }
 
         $data = $request->validate([
-            'calendar_id' => ['sometimes', 'integer'],
             'name' => ['sometimes', 'required', 'string', 'max:255'],
             'active' => ['sometimes', 'boolean'],
 
@@ -157,36 +150,12 @@ class AccessKeyController extends Controller
             'sub_calendar_permissions.*.access_type' => ['required', Rule::in(['read_only', 'modify'])],
         ]);
 
-        $newCalendarId = (int) ($data['calendar_id'] ?? $accessKey->calendar_id);
-
-        if (array_key_exists('calendar_id', $data)) {
-            $calendar = Calendar::query()
-                ->where('id', $newCalendarId)
-                ->where('user_id', $request->user()->id)
-                ->firstOrFail();
-
-            $newCalendarId = (int) $calendar->id;
-
-            if (!array_key_exists('sub_calendar_permissions', $data)) {
-                return response()->json([
-                    'message' => 'Validation error.',
-                    'errors' => [
-                        'sub_calendar_permissions' => ['sub_calendar_permissions is required when changing calendar_id.'],
-                    ],
-                ], 422);
-            }
-        }
-
         $incomingPerms = $data['sub_calendar_permissions'] ?? null;
         if (is_array($incomingPerms)) {
-            $this->assertValidSubCalendarPermissions($newCalendarId, $incomingPerms);
+            $this->assertValidSubCalendarPermissions((int) $calendar->id, $incomingPerms);
         }
 
-        DB::transaction(function () use ($accessKey, $data, $newCalendarId, $incomingPerms) {
-            if (array_key_exists('calendar_id', $data)) {
-                $accessKey->calendar_id = $newCalendarId;
-            }
-
+        DB::transaction(function () use ($accessKey, $data, $incomingPerms) {
             if (array_key_exists('name', $data)) {
                 $accessKey->name = $data['name'];
             }
@@ -252,14 +221,13 @@ class AccessKeyController extends Controller
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy(Request $request, string $id)
+    public function destroy(Request $request, Calendar $calendar, AccessKey $accessKey)
     {
-        $accessKey = AccessKey::query()
-            ->where('id', $id)
-            ->whereHas('calendar', function ($q) use ($request) {
-                $q->where('user_id', $request->user()->id);
-            })
-            ->firstOrFail();
+        $user = $request->user();
+
+        if ((int) $calendar->user_id !== (int) $user->id) {
+            abort(404);
+        }
 
         $accessKey->delete();
 

@@ -25,10 +25,11 @@ Route::middleware('auth:sanctum')->group(function () {
 
             Route::apiResource('calendars.custom-event-fields', CustomEventFieldController::class)
                 ->parameters(['custom-event-fields' => 'customEventField']);
+
+            Route::apiResource('calendars.access-keys', AccessKeyController::class)
+                ->parameters(['access-keys' => 'accessKey']);
         });
 
-
-        Route::apiResource('access-keys', AccessKeyController::class);
     });
 });
 

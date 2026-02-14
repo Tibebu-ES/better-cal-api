@@ -9,24 +9,21 @@ use Illuminate\Http\Request;
 
 class SubCalendarController extends Controller
 {
+    private function assertCalendarOwnedByUser(Request $request, Calendar $calendar): void
+    {
+        abort_unless($calendar->user_id === $request->user()->id, 404);
+    }
+
     /**
      * Display a listing of the resource.
      */
-    public function index(Request $request)
+    public function index(Request $request, Calendar $calendar)
     {
-        $user = $request->user();
+        $this->assertCalendarOwnedByUser($request, $calendar);
 
-        $query = SubCalendar::query()
-            ->whereHas('calendar', function ($q) use ($user) {
-                $q->where('user_id', $user->id);
-            })
-            ->orderByDesc('id');
-
-        if ($request->filled('calendar_id')) {
-            $query->where('calendar_id', (int) $request->input('calendar_id'));
-        }
-
-        $subCalendars = $query->paginate((int) $request->integer('per_page', 15));
+        $subCalendars = $calendar->subCalendars()
+            ->orderByDesc('id')
+            ->paginate((int) $request->integer('per_page', 15));
 
         return response()->json($subCalendars);
     }
@@ -34,25 +31,18 @@ class SubCalendarController extends Controller
     /**
      * Store a newly created resource in storage.
      */
-    public function store(Request $request)
+    public function store(Request $request, Calendar $calendar)
     {
-        $user = $request->user();
+        $this->assertCalendarOwnedByUser($request, $calendar);
 
         $data = $request->validate([
-            'calendar_id' => ['required', 'integer'],
             'name' => ['required', 'string', 'max:255'],
             'active' => ['sometimes', 'boolean'],
             'overlap' => ['sometimes', 'boolean'],
             'color' => ['sometimes', 'string', 'max:7', 'regex:/^#[0-9A-Fa-f]{6}$/'],
         ]);
 
-        $calendar = Calendar::query()
-            ->where('id', $data['calendar_id'])
-            ->where('user_id', $user->id)
-            ->firstOrFail();
-
-        $subCalendar = SubCalendar::create([
-            'calendar_id' => $calendar->id,
+        $subCalendar = $calendar->subCalendars()->create([
             'name' => $data['name'],
             'active' => $data['active'] ?? true,
             'overlap' => $data['overlap'] ?? false,
@@ -65,14 +55,9 @@ class SubCalendarController extends Controller
     /**
      * Display the specified resource.
      */
-    public function show(Request $request, string $id)
+    public function show(Request $request, Calendar $calendar, SubCalendar $subCalendar)
     {
-        $subCalendar = SubCalendar::query()
-            ->where('id', $id)
-            ->whereHas('calendar', function ($q) use ($request) {
-                $q->where('user_id', $request->user()->id);
-            })
-            ->firstOrFail();
+        $this->assertCalendarOwnedByUser($request, $calendar);
 
         return response()->json($subCalendar);
     }
@@ -80,31 +65,16 @@ class SubCalendarController extends Controller
     /**
      * Update the specified resource in storage.
      */
-    public function update(Request $request, string $id)
+    public function update(Request $request, Calendar $calendar, SubCalendar $subCalendar)
     {
-        $subCalendar = SubCalendar::query()
-            ->where('id', $id)
-            ->whereHas('calendar', function ($q) use ($request) {
-                $q->where('user_id', $request->user()->id);
-            })
-            ->firstOrFail();
+        $this->assertCalendarOwnedByUser($request, $calendar);
 
         $data = $request->validate([
-            'calendar_id' => ['sometimes', 'integer'],
             'name' => ['sometimes', 'required', 'string', 'max:255'],
             'active' => ['sometimes', 'boolean'],
             'overlap' => ['sometimes', 'boolean'],
             'color' => ['sometimes', 'string', 'max:7', 'regex:/^#[0-9A-Fa-f]{6}$/'],
         ]);
-
-        if (array_key_exists('calendar_id', $data)) {
-            $calendar = Calendar::query()
-                ->where('id', $data['calendar_id'])
-                ->where('user_id', $request->user()->id)
-                ->firstOrFail();
-
-            $data['calendar_id'] = $calendar->id;
-        }
 
         $subCalendar->fill($data);
         $subCalendar->save();
@@ -115,14 +85,9 @@ class SubCalendarController extends Controller
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy(Request $request, string $id)
+    public function destroy(Request $request, Calendar $calendar, SubCalendar $subCalendar)
     {
-        $subCalendar = SubCalendar::query()
-            ->where('id', $id)
-            ->whereHas('calendar', function ($q) use ($request) {
-                $q->where('user_id', $request->user()->id);
-            })
-            ->firstOrFail();
+        $this->assertCalendarOwnedByUser($request, $calendar);
 
         $subCalendar->delete();
 

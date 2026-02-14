@@ -16,20 +16,17 @@ class CustomEventFieldController extends Controller
     /**
      * Display a listing of the resource.
      */
-    public function index(Request $request)
+    public function index(Request $request, Calendar $calendar)
     {
         $user = $request->user();
 
-        $query = CustomEventField::query()
-            ->with(['options'])
-            ->whereHas('calendar', function ($q) use ($user) {
-                $q->where('user_id', $user->id);
-            })
-            ->orderByDesc('id');
-
-        if ($request->filled('calendar_id')) {
-            $query->where('calendar_id', (int) $request->input('calendar_id'));
+        if ((int) $calendar->user_id !== (int) $user->id) {
+            abort(404);
         }
+
+        $query = $calendar->customEventFields()
+            ->with(['options'])
+            ->orderByDesc('id');
 
         $fields = $query->paginate((int) $request->integer('per_page', 15));
 
@@ -39,22 +36,20 @@ class CustomEventFieldController extends Controller
     /**
      * Store a newly created resource in storage.
      */
-    public function store(Request $request)
+    public function store(Request $request, Calendar $calendar)
     {
         $user = $request->user();
 
+        if ((int) $calendar->user_id !== (int) $user->id) {
+            abort(404);
+        }
+
         $data = $request->validate([
-            'calendar_id' => ['required', 'integer'],
             'name' => ['required', 'string', 'max:255'],
             'type' => ['required', Rule::in(['text', 's_select', 'm_select'])],
             'options' => ['sometimes', 'array'],
             'options.*' => ['required', 'string', 'max:255'],
         ]);
-
-        $calendar = Calendar::query()
-            ->where('id', $data['calendar_id'])
-            ->where('user_id', $user->id)
-            ->firstOrFail();
 
         if (in_array($data['type'], ['s_select', 'm_select'], true) && empty($data['options'])) {
             return response()->json([
@@ -96,34 +91,33 @@ class CustomEventFieldController extends Controller
     /**
      * Display the specified resource.
      */
-    public function show(Request $request, string $id)
+    public function show(Request $request, Calendar $calendar, CustomEventField $customEventField)
     {
-        $field = CustomEventField::query()
-            ->with(['options'])
-            ->where('id', $id)
-            ->whereHas('calendar', function ($q) use ($request) {
-                $q->where('user_id', $request->user()->id);
-            })
-            ->firstOrFail();
+        $user = $request->user();
 
-        return response()->json($field);
+        if ((int) $calendar->user_id !== (int) $user->id) {
+            abort(404);
+        }
+
+        $customEventField->load(['options']);
+
+        return response()->json($customEventField);
     }
 
     /**
      * Update the specified resource in storage.
      */
-    public function update(Request $request, string $id)
+    public function update(Request $request, Calendar $calendar, CustomEventField $customEventField)
     {
-        $field = CustomEventField::query()
-            ->with(['options'])
-            ->where('id', $id)
-            ->whereHas('calendar', function ($q) use ($request) {
-                $q->where('user_id', $request->user()->id);
-            })
-            ->firstOrFail();
+        $user = $request->user();
+
+        if ((int) $calendar->user_id !== (int) $user->id) {
+            abort(404);
+        }
+
+        $customEventField->load(['options']);
 
         $data = $request->validate([
-            'calendar_id' => ['sometimes', 'integer'],
             'name' => ['sometimes', 'required', 'string', 'max:255'],
             'type' => ['sometimes', 'required', Rule::in(['text', 's_select', 'm_select'])],
 
@@ -133,34 +127,13 @@ class CustomEventFieldController extends Controller
             'options.*.name' => ['required', 'string', 'max:255'],
         ]);
 
-        if (array_key_exists('calendar_id', $data)) {
-            $calendar = Calendar::query()
-                ->where('id', $data['calendar_id'])
-                ->where('user_id', $request->user()->id)
-                ->firstOrFail();
+        $newType = $data['type'] ?? $customEventField->type;
 
-            $data['calendar_id'] = $calendar->id;
-        }
-
-       /* // Prevent changing type if there are existing values (avoids reinterpreting stored data).
-        if (array_key_exists('type', $data) && $data['type'] !== $field->type) {
-            $hasValues = CustomEventFieldValue::query()
-                ->where('custom_event_field_id', $field->id)
-                ->exists();
-
-            if ($hasValues) {
-                return response()->json([
-                    'message' => 'Validation error.',
-                    'errors' => [
-                        'type' => ['Cannot change field type while it has existing values.'],
-                    ],
-                ], 422);
-            }
-        }*/
-
-        $newType = $data['type'] ?? $field->type;
-
-        if (in_array($newType, ['s_select', 'm_select'], true) && array_key_exists('type', $data) && !array_key_exists('options', $data)) {
+        if (
+            in_array($newType, ['s_select', 'm_select'], true)
+            && array_key_exists('type', $data)
+            && !array_key_exists('options', $data)
+        ) {
             return response()->json([
                 'message' => 'Validation error.',
                 'errors' => [
@@ -169,9 +142,9 @@ class CustomEventFieldController extends Controller
             ], 422);
         }
 
-        DB::transaction(function () use ($field, $data, $newType) {
-            $field->fill($data);
-            $field->save();
+        DB::transaction(function () use ($customEventField, $data, $newType) {
+            $customEventField->fill($data);
+            $customEventField->save();
 
             // Only manage options for select types.
             if (!in_array($newType, ['s_select', 'm_select'], true)) {
@@ -182,7 +155,7 @@ class CustomEventFieldController extends Controller
                 return;
             }
 
-            $existingIds = $field->options()->pluck('id')->all();
+            $existingIds = $customEventField->options()->pluck('id')->all();
 
             $incoming = $data['options'] ?? [];
             $incomingIds = [];
@@ -200,7 +173,7 @@ class CustomEventFieldController extends Controller
                     // Update only if it belongs to this field.
                     CustomEventFieldOption::query()
                         ->where('id', $optionId)
-                        ->where('custom_event_field_id', $field->id)
+                        ->where('custom_event_field_id', $customEventField->id)
                         ->update(['name' => $name]);
 
                     continue;
@@ -208,7 +181,7 @@ class CustomEventFieldController extends Controller
 
                 // Create new option (new id is fine because nothing references it yet).
                 CustomEventFieldOption::create([
-                    'custom_event_field_id' => $field->id,
+                    'custom_event_field_id' => $customEventField->id,
                     'name' => $name,
                 ]);
             }
@@ -221,44 +194,29 @@ class CustomEventFieldController extends Controller
                 return;
             }
 
-
             CustomEventFieldOption::query()
-                ->where('custom_event_field_id', $field->id)
+                ->where('custom_event_field_id', $customEventField->id)
                 ->whereIn('id', $toDelete)
                 ->delete();
         });
 
-        // Convert the internal runtime exception into a 422 (without leaking stack traces).
-        // (We keep this outside the transaction scope in case the exception was thrown.)
-        try {
-            // no-op: transaction already executed
-        } catch (\RuntimeException $e) {
-            return response()->json([
-                'message' => 'Validation error.',
-                'errors' => [
-                    'options' => [$e->getMessage()],
-                ],
-            ], 422);
-        }
+        $customEventField->load('options');
 
-        $field->load('options');
-
-        return response()->json($field);
+        return response()->json($customEventField);
     }
 
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy(Request $request, string $id)
+    public function destroy(Request $request, Calendar $calendar, CustomEventField $customEventField)
     {
-        $field = CustomEventField::query()
-            ->where('id', $id)
-            ->whereHas('calendar', function ($q) use ($request) {
-                $q->where('user_id', $request->user()->id);
-            })
-            ->firstOrFail();
+        $user = $request->user();
 
-        $field->delete();
+        if ((int) $calendar->user_id !== (int) $user->id) {
+            abort(404);
+        }
+
+        $customEventField->delete();
 
         return response()->json(null, 204);
     }

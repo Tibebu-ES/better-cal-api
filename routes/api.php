@@ -19,12 +19,15 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::scopeBindings()->group(function () {
             Route::apiResource('calendars.sub-calendars', SubCalendarController::class)
                 ->parameters(['sub-calendars' => 'subCalendar']);
+
             Route::apiResource('calendars.events', EventController::class)
                 ->parameters(['events' => 'event']);
+
+            Route::apiResource('calendars.custom-event-fields', CustomEventFieldController::class)
+                ->parameters(['custom-event-fields' => 'customEventField']);
         });
 
 
-        Route::apiResource('custom-event-fields', CustomEventFieldController::class);
         Route::apiResource('access-keys', AccessKeyController::class);
     });
 });

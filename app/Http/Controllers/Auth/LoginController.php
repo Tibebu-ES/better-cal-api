@@ -21,6 +21,7 @@ class LoginController extends Controller
         $token = $request->user()->createToken('auth-token')->plainTextToken;
 
         return response()->json([
+            'user' => $request->user(),
             'token' => $token,
             'token_type' => 'Bearer'
         ]);

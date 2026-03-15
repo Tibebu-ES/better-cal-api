@@ -4,12 +4,14 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\EventResource;
+use App\Models\AccessKey;
 use App\Models\Calendar;
 use App\Models\CustomEventField;
 use App\Models\CustomEventFieldOption;
 use App\Models\CustomEventFieldValue;
 use App\Models\Event;
 use App\Models\SubCalendar;
+use App\Models\SubCalendarPermission;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
@@ -19,13 +21,13 @@ class EventController extends Controller
     /**
      * Display a listing of the resource.
      */
-    public function index(Request $request, Calendar $calendar)
+    public function index(Request $request)
     {
-        $user = $request->user();
+        $key = $request->header('X-Access-Key');
+        $accessKey = AccessKey::where('key', $key)->firstorfail();
 
-        if ((int) $calendar->user_id !== (int) $user->id) {
-            abort(404);
-        }
+        $calendar = $accessKey->calendar;
+
 
         $query = $calendar->events()
             ->with([
@@ -73,13 +75,12 @@ class EventController extends Controller
      * { "custom_event_field_id": 12, "custom_event_field_option_ids": [61, 62] }
      * ]
      */
-    public function store(Request $request, Calendar $calendar)
+    public function store(Request $request)
     {
-        $user = $request->user();
+        $key = $request->header('X-Access-Key');
+        $accessKey = AccessKey::where('key', $key)->firstorfail();
 
-        if ((int) $calendar->user_id !== (int) $user->id) {
-            abort(404);
-        }
+        $calendar = $accessKey->calendar;
 
         $data = $request->validate([
             'sub_calendar_id' => ['required', 'integer'],
@@ -141,13 +142,17 @@ class EventController extends Controller
     /**
      * Display the specified resource.
      */
-    public function show(Request $request, Calendar $calendar, Event $event)
+    public function show(Request $request, Event $event)
     {
-        $user = $request->user();
+        $key = $request->header('X-Access-Key');
+        $accessKey = AccessKey::where('key', $key)->firstorfail();
 
-        if ((int) $calendar->user_id !== (int) $user->id) {
-            abort(404);
+        //check if the access key has modify permission
+        $subCalendarPermission = SubCalendarPermission::where('sub_calendar_id',$event->sub_calendar_id)->where('access_key_id',$accessKey->id)->first();
+        if(!$subCalendarPermission || !in_array($subCalendarPermission->access_type,['read_only','modify'])){
+            abort(403,'You do not have permission to view this event');
         }
+
 
         $event->load([
             'customEventFieldValues.customEventField',
@@ -160,13 +165,18 @@ class EventController extends Controller
     /**
      * Update the specified resource in storage.
      */
-    public function update(Request $request, Calendar $calendar, Event $event)
+    public function update(Request $request, Event $event)
     {
-        $user = $request->user();
+        $key = $request->header('X-Access-Key');
+        $accessKey = AccessKey::where('key', $key)->firstorfail();
 
-        if ((int) $calendar->user_id !== (int) $user->id) {
-            abort(404);
+        //check if the access key has modify permission
+        $subCalendarPermission = SubCalendarPermission::where('sub_calendar_id',$event->sub_calendar_id)->where('access_key_id',$accessKey->id)->first();
+        if(!$subCalendarPermission || $subCalendarPermission->access_type != 'modify'){
+            abort(403,'You do not have permission to update this event');
         }
+
+        $calendar = $accessKey->calendar;
 
         $data = $request->validate([
             'sub_calendar_id' => ['sometimes', 'integer'],
@@ -227,14 +237,16 @@ class EventController extends Controller
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy(Request $request, Calendar $calendar, Event $event)
+    public function destroy(Request $request, Event $event)
     {
-        $user = $request->user();
+        $key = $request->header('X-Access-Key');
+        $accessKey = AccessKey::where('key', $key)->firstorfail();
 
-        if ((int) $calendar->user_id !== (int) $user->id) {
-            abort(404);
+        //check if the access key has modify permission
+        $subCalendarPermission = SubCalendarPermission::where('sub_calendar_id',$event->sub_calendar_id)->where('access_key_id',$accessKey->id)->first();
+        if(!$subCalendarPermission || $subCalendarPermission->access_type != 'modify'){
+            abort(403,'You do not have permission to delete this event');
         }
-
         $event->delete();
 
         return response()->json(null, 204);

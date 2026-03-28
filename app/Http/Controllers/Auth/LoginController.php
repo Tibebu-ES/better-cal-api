@@ -19,9 +19,11 @@ class LoginController extends Controller
         $request->authenticate();
 
         $token = $request->user()->createToken('auth-token')->plainTextToken;
+        $defaultCalendar = $request->user()->calendars()->first();
 
         return response()->json([
             'user' => $request->user(),
+            'default_calendar' => $defaultCalendar,
             'token' => $token,
             'token_type' => 'Bearer'
         ]);

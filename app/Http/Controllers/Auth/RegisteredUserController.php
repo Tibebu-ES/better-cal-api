@@ -35,11 +35,28 @@ class RegisteredUserController extends Controller
 
         event(new Registered($user));
 
+        //create default calendar
+        $user->calendars()->create([
+            'name' => 'Test calendar',
+            'active' => true,
+            'about' => 'Your first calendar!',
+            'timezone' => 'UTC',
+            'locale' => 'en'
+        ]);
+        $defaultCalendar = $user->calendars()->first();
+        //add test sub-calendar
+        $defaultCalendar->subCalendars()->create([
+            'name' => 'Personal'
+        ]);
+
+
+
         $token = $user->createToken('auth-token')->plainTextToken;
 
         return response()->json([
             'user' => $user,
             'token' => $token,
+            'default_calendar' => $defaultCalendar,
             'token_type' => 'Bearer'
         ]);
     }

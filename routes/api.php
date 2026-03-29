@@ -41,8 +41,18 @@ Route::prefix('v1')->group(function () {
         //with subCalendarPermissions
         $accessKey = AccessKey::where('key', $key)->with('subCalendarPermissions')->firstorfail();
         $calendar = $accessKey->calendar()->first();
-        $subCalendarsIdsToInclude = $accessKey->subCalendarPermissions()->whereIn('access_type',['read_only','modify'])->pluck('sub_calendar_id');
-        $subCalendars = $calendar->subCalendars()->whereIn('id',$subCalendarsIdsToInclude)->get();
+        //only filter sb-calendars if the $accessKey shared_type is selected_sub_calendars; if it is all_sub_calendars, then return all
+        // Updated filtering logic for sub-calendars
+        $subCalendars = $calendar->subCalendars();
+
+        if ($accessKey->shared_type === 'selected_sub_calendars') {
+            $subCalendarsIdsToInclude = $accessKey->subCalendarPermissions()
+                ->whereIn('access_type', ['read_only', 'modify'])
+                ->pluck('sub_calendar_id');
+            $subCalendars = $subCalendars->whereIn('id', $subCalendarsIdsToInclude);
+        }
+
+        $subCalendars = $subCalendars->get();
         $customEventFields = $calendar->customEventFields()->with(['options'])->get();
         return response()->json(['access_key' => $accessKey, 'calendar' => $calendar,'sub_calendars' => $subCalendars, 'custom_event_fields' => $customEventFields]);
     });

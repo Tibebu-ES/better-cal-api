@@ -63,6 +63,8 @@ class AccessKeyController extends Controller
             'has_password' => ['sometimes', 'boolean'],
             'password' => ['sometimes', 'nullable', 'string', 'min:8', 'max:255'],
 
+            'shared_type' => ['sometimes', Rule::in(['all_sub_calendars', 'selected_sub_calendars'])],
+
             'sub_calendar_permissions' => ['sometimes', 'array'],
             'sub_calendar_permissions.*.sub_calendar_id' => ['required', 'integer'],
             'sub_calendar_permissions.*.access_type' => ['required', Rule::in(['read_only', 'modify'])],
@@ -81,9 +83,20 @@ class AccessKeyController extends Controller
         }
 
         $incomingPerms = $data['sub_calendar_permissions'] ?? [];
+        $sharedType = $data['shared_type'] ?? 'all_sub_calendars';
+
+        if ($sharedType === 'selected_sub_calendars' && $incomingPerms === []) {
+            return response()->json([
+                'message' => 'Validation error.',
+                'errors' => [
+                    'sub_calendar_permissions' => ['sub_calendar_permissions are required when shared_type is selected_sub_calendars.'],
+                ],
+            ], 422);
+        }
+
         $this->assertValidSubCalendarPermissions((int) $calendar->id, $incomingPerms);
 
-        $accessKey = DB::transaction(function () use ($calendar, $data, $hasPassword, $password, $incomingPerms) {
+        $accessKey = DB::transaction(function () use ($calendar, $data, $hasPassword, $password, $incomingPerms, $sharedType) {
             $accessKey = AccessKey::create([
                 'calendar_id' => $calendar->id,
                 'name' => $data['name'],
@@ -91,6 +104,7 @@ class AccessKeyController extends Controller
                 'active' => $data['active'] ?? true,
                 'has_password' => $hasPassword,
                 'password' => $hasPassword ? Hash::make((string) $password) : null,
+                'shared_type' => $sharedType,
             ]);
 
             if ($incomingPerms !== []) {
@@ -145,23 +159,43 @@ class AccessKeyController extends Controller
             'has_password' => ['sometimes', 'boolean'],
             'password' => ['sometimes', 'nullable', 'string', 'min:8', 'max:255'],
 
+            'shared_type' => ['sometimes', Rule::in(['all_sub_calendars', 'selected_sub_calendars'])],
+
             'sub_calendar_permissions' => ['sometimes', 'array'],
             'sub_calendar_permissions.*.sub_calendar_id' => ['required', 'integer'],
             'sub_calendar_permissions.*.access_type' => ['required', Rule::in(['read_only', 'modify'])],
         ]);
 
         $incomingPerms = $data['sub_calendar_permissions'] ?? null;
+
+        $sharedType = $data['shared_type'] ?? $accessKey->shared_type;
+        if ($sharedType === 'selected_sub_calendars') {
+            $hasPerms = is_array($incomingPerms) ? count($incomingPerms) > 0 : $accessKey->subCalendarPermissions()->exists();
+            if (!$hasPerms) {
+                return response()->json([
+                    'message' => 'Validation error.',
+                    'errors' => [
+                        'sub_calendar_permissions' => ['sub_calendar_permissions are required when shared_type is selected_sub_calendars.'],
+                    ],
+                ], 422);
+            }
+        }
+
         if (is_array($incomingPerms)) {
             $this->assertValidSubCalendarPermissions((int) $calendar->id, $incomingPerms);
         }
 
-        DB::transaction(function () use ($accessKey, $data, $incomingPerms) {
+        DB::transaction(function () use ($accessKey, $data, $incomingPerms, $sharedType) {
             if (array_key_exists('name', $data)) {
                 $accessKey->name = $data['name'];
             }
 
             if (array_key_exists('active', $data)) {
                 $accessKey->active = (bool) $data['active'];
+            }
+
+            if (array_key_exists('shared_type', $data)) {
+                $accessKey->shared_type = $data['shared_type'];
             }
 
             // Password logic

@@ -28,8 +28,8 @@ class EventController extends Controller
 
         $calendar = $accessKey->calendar;
 
-        //@todo only events in the sub-calendars the key has read or modify access
-        $subCalendarsIdsToInclude = $accessKey->subCalendarPermissions()->whereIn('access_type',['read_only','modify'])->pluck('sub_calendar_id');
+        // only events in the sub-calendars the key has read or modify access if the shared type is selected_sub_calendars
+        $subCalendarsIdsToInclude = $accessKey->shared_type == 'selected_sub_calendars' ? $accessKey->subCalendarPermissions()->whereIn('access_type',['read_only','modify'])->pluck('sub_calendar_id') : [];
 
 
         $query = $calendar->events()
@@ -37,7 +37,7 @@ class EventController extends Controller
                 'customEventFieldValues.customEventField',
                 'customEventFieldValues.customEventFieldOption',
             ])
-            ->whereIn('sub_calendar_id',$subCalendarsIdsToInclude)
+            ->when($accessKey->shared_type == 'selected_sub_calendars', fn ($q) => $q->whereIn('sub_calendar_id',$subCalendarsIdsToInclude))
             ->orderByDesc('id');
 
         if ($request->filled('sub_calendar_id')) {

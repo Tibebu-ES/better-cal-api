@@ -12,7 +12,13 @@ class AccessKey extends Model
         'key',
         'active',
         'has_password',
-        'password'
+        'password',
+        'shared_type'
+    ];
+
+    protected $casts = [
+        'active' => 'boolean',
+        'has_password' => 'boolean'
     ];
 
     public function calendar(){

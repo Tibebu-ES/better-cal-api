@@ -41,7 +41,8 @@ Route::prefix('v1')->group(function () {
         //with subCalendarPermissions
         $accessKey = AccessKey::where('key', $key)->with('subCalendarPermissions')->firstorfail();
         $calendar = $accessKey->calendar()->first();
-        $subCalendars = $calendar->subCalendars()->get();
+        $subCalendarsIdsToInclude = $accessKey->subCalendarPermissions()->whereIn('access_type',['read_only','modify'])->pluck('sub_calendar_id');
+        $subCalendars = $calendar->subCalendars()->whereIn('id',$subCalendarsIdsToInclude)->get();
         $customEventFields = $calendar->customEventFields()->with(['options'])->get();
         return response()->json(['access_key' => $accessKey, 'calendar' => $calendar,'sub_calendars' => $subCalendars, 'custom_event_fields' => $customEventFields]);
     });

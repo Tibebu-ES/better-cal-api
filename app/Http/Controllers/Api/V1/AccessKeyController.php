@@ -64,6 +64,7 @@ class AccessKeyController extends Controller
             'password' => ['sometimes', 'nullable', 'string', 'min:8', 'max:255'],
 
             'shared_type' => ['sometimes', Rule::in(['all_sub_calendars', 'selected_sub_calendars'])],
+            'role' => ['sometimes', Rule::in(['read_only', 'modify'])],
 
             'sub_calendar_permissions' => ['sometimes', 'array'],
             'sub_calendar_permissions.*.sub_calendar_id' => ['required', 'integer'],
@@ -84,6 +85,7 @@ class AccessKeyController extends Controller
 
         $incomingPerms = $data['sub_calendar_permissions'] ?? [];
         $sharedType = $data['shared_type'] ?? 'all_sub_calendars';
+        $role = $data['role'] ?? 'read_only';
 
         if ($sharedType === 'selected_sub_calendars' && $incomingPerms === []) {
             return response()->json([
@@ -96,7 +98,7 @@ class AccessKeyController extends Controller
 
         $this->assertValidSubCalendarPermissions((int) $calendar->id, $incomingPerms);
 
-        $accessKey = DB::transaction(function () use ($calendar, $data, $hasPassword, $password, $incomingPerms, $sharedType) {
+        $accessKey = DB::transaction(function () use ($calendar, $data, $hasPassword, $password, $incomingPerms, $sharedType, $role) {
             $accessKey = AccessKey::create([
                 'calendar_id' => $calendar->id,
                 'name' => $data['name'],
@@ -105,6 +107,7 @@ class AccessKeyController extends Controller
                 'has_password' => $hasPassword,
                 'password' => $hasPassword ? Hash::make((string) $password) : null,
                 'shared_type' => $sharedType,
+                'role' => $role,
             ]);
 
             if ($incomingPerms !== []) {
@@ -160,6 +163,7 @@ class AccessKeyController extends Controller
             'password' => ['sometimes', 'nullable', 'string', 'min:8', 'max:255'],
 
             'shared_type' => ['sometimes', Rule::in(['all_sub_calendars', 'selected_sub_calendars'])],
+            'role' => ['sometimes', Rule::in(['read_only', 'modify'])],
 
             'sub_calendar_permissions' => ['sometimes', 'array'],
             'sub_calendar_permissions.*.sub_calendar_id' => ['required', 'integer'],
@@ -196,6 +200,10 @@ class AccessKeyController extends Controller
 
             if (array_key_exists('shared_type', $data)) {
                 $accessKey->shared_type = $data['shared_type'];
+            }
+
+            if (array_key_exists('role', $data)) {
+                $accessKey->role = $data['role'];
             }
 
             // Password logic

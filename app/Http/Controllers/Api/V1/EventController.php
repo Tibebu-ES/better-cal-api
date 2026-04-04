@@ -151,9 +151,16 @@ class EventController extends Controller
         $key = $request->header('X-Access-Key');
         $accessKey = AccessKey::where('key', $key)->firstorfail();
 
-        //check if the access key has modify permission
-        $subCalendarPermission = SubCalendarPermission::where('sub_calendar_id',$event->sub_calendar_id)->where('access_key_id',$accessKey->id)->first();
-        if(!$subCalendarPermission || !in_array($subCalendarPermission->access_type,['read_only','modify'])){
+        //check if the access key has view permission
+        $hasPermissionToView = false;
+        if($accessKey->shared_type == 'selected_sub_calendars'){
+            $subCalendarPermission = SubCalendarPermission::where('sub_calendar_id',$event->sub_calendar_id)->where('access_key_id',$accessKey->id)->first();
+            $hasPermissionToView = $subCalendarPermission && in_array($subCalendarPermission->access_type,['read_only','modify']);
+        }elseif ($accessKey->shared_type == 'all_sub_calendars' && in_array($accessKey->role,['read_only','modify'])) {
+            $hasPermissionToView = true;
+        }
+
+        if(!$hasPermissionToView){
             abort(403,'You do not have permission to view this event');
         }
 
@@ -175,8 +182,15 @@ class EventController extends Controller
         $accessKey = AccessKey::where('key', $key)->firstorfail();
 
         //check if the access key has modify permission
-        $subCalendarPermission = SubCalendarPermission::where('sub_calendar_id',$event->sub_calendar_id)->where('access_key_id',$accessKey->id)->first();
-        if(!$subCalendarPermission || $subCalendarPermission->access_type != 'modify'){
+        $hasPermissionToUpdate = false;
+        if($accessKey->shared_type == 'selected_sub_calendars'){
+            $subCalendarPermission = SubCalendarPermission::where('sub_calendar_id',$event->sub_calendar_id)->where('access_key_id',$accessKey->id)->first();
+            $hasPermissionToUpdate = $subCalendarPermission && $subCalendarPermission->access_type == 'modify';
+        }elseif ($accessKey->shared_type == 'all_sub_calendars' && $accessKey->role == 'modify') {
+            $hasPermissionToUpdate = true;
+        }
+
+        if(!$hasPermissionToUpdate){
             abort(403,'You do not have permission to update this event');
         }
 
@@ -247,8 +261,15 @@ class EventController extends Controller
         $accessKey = AccessKey::where('key', $key)->firstorfail();
 
         //check if the access key has modify permission
-        $subCalendarPermission = SubCalendarPermission::where('sub_calendar_id',$event->sub_calendar_id)->where('access_key_id',$accessKey->id)->first();
-        if(!$subCalendarPermission || $subCalendarPermission->access_type != 'modify'){
+        $hasPermissionToDelete = false;
+        if($accessKey->shared_type == 'selected_sub_calendars'){
+            $subCalendarPermission = SubCalendarPermission::where('sub_calendar_id',$event->sub_calendar_id)->where('access_key_id',$accessKey->id)->first();
+            $hasPermissionToDelete = $subCalendarPermission && $subCalendarPermission->access_type == 'modify';
+        }elseif ($accessKey->shared_type == 'all_sub_calendars' && $accessKey->role == 'modify') {
+            $hasPermissionToDelete = true;
+        }
+
+        if(!$hasPermissionToDelete){
             abort(403,'You do not have permission to delete this event');
         }
         $event->delete();

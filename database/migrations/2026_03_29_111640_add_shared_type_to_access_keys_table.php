@@ -11,9 +11,13 @@ return new class extends Migration
      */
     public function up(): void
     {
+        //shared_type: all_subcalendars|selected_subcalendars
+        //role : If the attribute share_type is set to all_subcalendars, then this attribute defines the common permission the access key has for all sub-calendars.
         Schema::table('access_keys', function (Blueprint $table) {
             $table->string('shared_type')->default('all_sub_calendars')->after('password');
+            $table->string('role')->default('read_only')->after('shared_type');
         });
+
     }
 
     /**
@@ -23,6 +27,7 @@ return new class extends Migration
     {
         Schema::table('access_keys', function (Blueprint $table) {
             $table->dropColumn('shared_type');
+            $table->dropColumn('role');
         });
     }
 };

@@ -13,7 +13,8 @@ class AccessKey extends Model
         'active',
         'has_password',
         'password',
-        'shared_type'
+        'shared_type',
+        'role'
     ];
 
     protected $casts = [

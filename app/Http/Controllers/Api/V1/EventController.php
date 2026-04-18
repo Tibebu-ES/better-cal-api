@@ -65,7 +65,7 @@ class EventController extends Controller
             $query->where('start_date', '<=', $request->input('start_to'));
         }
 
-        $events = $query->paginate((int) $request->integer('per_page', 15));
+        $events = $query->get();
 
         return EventResource::collection($events);
     }

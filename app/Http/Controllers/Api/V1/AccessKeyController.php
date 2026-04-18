@@ -102,7 +102,7 @@ class AccessKeyController extends Controller
             $accessKey = AccessKey::create([
                 'calendar_id' => $calendar->id,
                 'name' => $data['name'],
-                'key' => $this->generateUniqueAccessKey(),
+                'key' => AccessKey::generateUniqueAccessKey(),
                 'active' => $data['active'] ?? true,
                 'has_password' => $hasPassword,
                 'password' => $hasPassword ? Hash::make((string) $password) : null,
@@ -314,22 +314,4 @@ class AccessKeyController extends Controller
         }
     }
 
-    private function generateUniqueAccessKey(): string
-    {
-        // 40 chars is plenty; loop in the extremely unlikely event of a collision.
-        for ($i = 0; $i < 5; $i++) {
-            $key = Str::random(40);
-
-            $exists = AccessKey::query()
-                ->where('key', $key)
-                ->exists();
-
-            if (!$exists) {
-                return $key;
-            }
-        }
-
-        // If we somehow collide repeatedly, make it longer.
-        return Str::random(80);
-    }
 }

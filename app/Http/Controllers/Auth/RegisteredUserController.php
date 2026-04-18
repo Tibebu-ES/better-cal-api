@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Models\AccessKey;
 use App\Models\User;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\JsonResponse;
@@ -44,11 +45,27 @@ class RegisteredUserController extends Controller
             'locale' => 'en'
         ]);
         $defaultCalendar = $user->calendars()->first();
-        //add test sub-calendar
+        //add test sub-calendars, Personal, Work and Social
         $defaultCalendar->subCalendars()->create([
             'name' => 'Personal'
         ]);
+        $defaultCalendar->subCalendars()->create([
+            'name' => 'Work',
+            'color' => '#FA003F'
+        ]);
+        $defaultCalendar->subCalendars()->create([
+            'name' => 'Social',
+            'color' => '#a60cc4'
+        ]);
 
+        //create a default access key with modify access to the default calendar
+        $defaultCalendar->accessKeys()->create([
+            'name' => 'Admin',
+            'active' => true,
+            'key' => AccessKey::generateUniqueAccessKey(),
+            'shared_type' => 'all_sub_calendars',
+            'role' => 'modify'
+        ]);
 
 
         $token = $user->createToken('auth-token')->plainTextToken;

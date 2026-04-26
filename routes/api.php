@@ -52,7 +52,7 @@ Route::prefix('v1')->group(function () {
             $subCalendars = $subCalendars->whereIn('id', $subCalendarsIdsToInclude);
         }
 
-        $subCalendars = $subCalendars->get();
+        $subCalendars = $subCalendars->where('active',true)->get();
         $customEventFields = $calendar->customEventFields()->with(['options'])->get();
         return response()->json(['access_key' => $accessKey, 'calendar' => $calendar,'sub_calendars' => $subCalendars, 'custom_event_fields' => $customEventFields]);
     });

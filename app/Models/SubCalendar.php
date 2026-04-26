@@ -16,6 +16,12 @@ class SubCalendar extends Model
         'color'
     ];
 
+    protected $casts = [
+        'active' => 'boolean',
+        'overlap' => 'boolean'
+    ];
+
+
     public function calendar(){
         return $this->belongsTo(Calendar::class);
     }

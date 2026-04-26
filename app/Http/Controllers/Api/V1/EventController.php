@@ -111,6 +111,10 @@ class EventController extends Controller
             ->where('calendar_id', $calendar->id)
             ->firstOrFail();
 
+        if (!$subCalendar->overlap) {
+            $this->checkForOverlap($subCalendar->id, $data['start_date'], $data['end_date']);
+        }
+
         $event = DB::transaction(function () use ($data, $subCalendar, $request, $calendar) {
             $event = Event::create([
                 'sub_calendar_id' => $subCalendar->id,
@@ -230,6 +234,14 @@ class EventController extends Controller
                     ->firstOrFail();
 
                 $data['sub_calendar_id'] = $subCalendar->id;
+            } else {
+                $subCalendar = $event->subCalendar;
+            }
+
+            if (!$subCalendar->overlap) {
+                $startDate = $data['start_date'] ?? $event->start_date;
+                $endDate = $data['end_date'] ?? $event->end_date;
+                $this->checkForOverlap($subCalendar->id, $startDate, $endDate, $event->id);
             }
 
             $event->fill($data);
@@ -275,6 +287,38 @@ class EventController extends Controller
         $event->delete();
 
         return response()->json(null, 204);
+    }
+
+    /**
+     * Check if the event overlaps with existing events in the same sub-calendar.
+     *
+     * @param int $subCalendarId
+     * @param string $startDate
+     * @param string $endDate
+     * @param int|null $excludeEventId
+     * @return void
+     */
+    private function checkForOverlap(int $subCalendarId, string $startDate, string $endDate, ?int $excludeEventId = null): void
+    {
+        $overlapExists = Event::query()
+            ->where('sub_calendar_id', $subCalendarId)
+            ->when($excludeEventId, fn($q) => $q->where('id', '!=', $excludeEventId))
+            ->where(function ($query) use ($startDate, $endDate) {
+                $query->where(function ($q) use ($startDate, $endDate) {
+                    $q->where('start_date', '<', $endDate)
+                        ->where('end_date', '>', $startDate);
+                });
+            })
+            ->exists();
+
+        if ($overlapExists) {
+            abort(response()->json([
+                'message' => 'The given data was invalid.',
+                'errors' => [
+                    'overlap' => ['The event overlaps with an existing event in this sub-calendar.'],
+                ],
+            ], 422));
+        }
     }
 
     /**
